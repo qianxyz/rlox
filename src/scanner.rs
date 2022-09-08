@@ -77,8 +77,25 @@ impl Scanner {
                 }
             }
 
+            b'/' => {
+                if self.match_(b'/') {
+                    // line of comment
+                    while self.peek() != b'\n' && !self.is_at_end() {
+                        self.advance();
+                    }
+                } else {
+                    self.add_token(TokenType::Slash);
+                }
+            }
+
+            b' ' | b'\r' | b'\t' => (),
             b'\n' => self.line += 1,
-            _ => todo!(),
+
+            b'"' => self.string(),
+            c if Self::is_digit(c) => self.number(),
+            c if Self::is_alphabetic(c) => self.identifier(),
+
+            _ => todo!("unexpected character"),
         };
     }
 
@@ -104,5 +121,111 @@ impl Scanner {
             self.current += 1;
             true
         }
+    }
+
+    fn peek(&self) -> u8 {
+        if self.is_at_end() {
+            b'\0'
+        } else {
+            self.source.as_bytes()[self.current]
+        }
+    }
+
+    fn string(&mut self) {
+        while self.peek() != b'"' && !self.is_at_end() {
+            if self.peek() == b'\n' {
+                self.line += 1;
+            }
+            self.advance();
+        }
+
+        if self.is_at_end() {
+            todo!("unterminated string")
+        }
+
+        // consume the ending `"`
+        self.advance();
+
+        let value = String::from_utf8(
+            self.source.as_bytes()[self.start + 1..self.current - 1].to_vec(),
+        )
+        .unwrap();
+        self.add_token(TokenType::String { literal: value })
+    }
+
+    fn number(&mut self) {
+        while Self::is_digit(self.peek()) {
+            self.advance();
+        }
+
+        // fractional part
+        if self.peek() == b'.' && Self::is_digit(self.peek_next()) {
+            // consume the `.`
+            self.advance();
+            while Self::is_digit(self.peek()) {
+                self.advance();
+            }
+        }
+
+        self.add_token(TokenType::Number {
+            literal: String::from_utf8(
+                self.source.as_bytes()[self.start..self.current].to_vec(),
+            )
+            .unwrap()
+            .parse()
+            .unwrap(),
+        })
+    }
+
+    fn is_digit(c: u8) -> bool {
+        b'0' <= c && c <= b'9'
+    }
+
+    fn peek_next(&self) -> u8 {
+        if self.current + 1 >= self.source.len() {
+            b'\0'
+        } else {
+            self.source.as_bytes()[self.current + 1]
+        }
+    }
+
+    fn is_alphabetic(c: u8) -> bool {
+        (b'a' <= c && c <= b'z') || (b'A' <= c && c <= b'Z') || c == b'_'
+    }
+
+    fn is_alphanumeric(c: u8) -> bool {
+        Self::is_digit(c) || Self::is_alphabetic(c)
+    }
+
+    fn identifier(&mut self) {
+        while Self::is_alphanumeric(self.peek()) {
+            self.advance();
+        }
+
+        let text = String::from_utf8(
+            self.source.as_bytes()[self.start..self.current].to_vec(),
+        )
+        .unwrap();
+        let type_ = match text.as_str() {
+            "and" => TokenType::And,
+            "class" => TokenType::Class,
+            "else" => TokenType::Else,
+            "false" => TokenType::False,
+            "for" => TokenType::For,
+            "fun" => TokenType::Fun,
+            "if" => TokenType::If,
+            "nil" => TokenType::Nil,
+            "or" => TokenType::Or,
+            "print" => TokenType::Print,
+            "return" => TokenType::Return,
+            "super" => TokenType::Super,
+            "this" => TokenType::This,
+            "true" => TokenType::True,
+            "var" => TokenType::Var,
+            "while" => TokenType::While,
+            _ => TokenType::Identifier,
+        };
+
+        self.add_token(type_);
     }
 }
