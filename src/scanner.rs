@@ -111,9 +111,8 @@ impl Scanner {
     }
 
     fn match_(&mut self, expected: u8) -> bool {
-        if self.is_at_end() {
-            false
-        } else if self.source.as_bytes()[self.current] != expected {
+        if self.is_at_end() || self.source.as_bytes()[self.current] != expected
+        {
             false
         } else {
             self.current += 1;
@@ -215,7 +214,7 @@ trait AsciiExt_ {
 
 impl AsciiExt_ for u8 {
     fn is_digit(&self) -> bool {
-        (*self as char).is_digit(10)
+        (*self as char).is_ascii_digit()
     }
 
     fn is_alphabetic(&self) -> bool {
