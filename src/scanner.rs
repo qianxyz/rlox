@@ -92,8 +92,8 @@ impl Scanner {
             b'\n' => self.line += 1,
 
             b'"' => self.string(),
-            c if Self::is_digit(c) => self.number(),
-            c if Self::is_alphabetic(c) => self.identifier(),
+            c if c.is_digit() => self.number(),
+            c if c.is_alphabetic() => self.identifier(),
 
             _ => todo!("unexpected character"),
         };
@@ -105,11 +105,9 @@ impl Scanner {
     }
 
     fn add_token(&mut self, type_: TokenType) {
-        let text = String::from_utf8(
-            self.source.as_bytes()[self.start..self.current].to_vec(),
-        )
-        .unwrap();
-        self.tokens.push(Token::new(type_, text, self.line))
+        let text = &self.source[self.start..self.current];
+        self.tokens
+            .push(Token::new(type_, text.to_string(), self.line))
     }
 
     fn match_(&mut self, expected: u8) -> bool {
@@ -146,39 +144,29 @@ impl Scanner {
         // consume the ending `"`
         self.advance();
 
-        let value = String::from_utf8(
-            self.source.as_bytes()[self.start + 1..self.current - 1].to_vec(),
-        )
-        .unwrap();
-        self.add_token(TokenType::String { literal: value })
+        let value = &self.source[self.start + 1..self.current - 1];
+        self.add_token(TokenType::String {
+            literal: value.to_string(),
+        })
     }
 
     fn number(&mut self) {
-        while Self::is_digit(self.peek()) {
+        while self.peek().is_digit() {
             self.advance();
         }
 
         // fractional part
-        if self.peek() == b'.' && Self::is_digit(self.peek_next()) {
+        if self.peek() == b'.' && self.peek_next().is_digit() {
             // consume the `.`
             self.advance();
-            while Self::is_digit(self.peek()) {
+            while self.peek().is_digit() {
                 self.advance();
             }
         }
 
-        self.add_token(TokenType::Number {
-            literal: String::from_utf8(
-                self.source.as_bytes()[self.start..self.current].to_vec(),
-            )
-            .unwrap()
-            .parse()
-            .unwrap(),
-        })
-    }
-
-    fn is_digit(c: u8) -> bool {
-        b'0' <= c && c <= b'9'
+        let number: f32 =
+            self.source[self.start..self.current].parse().unwrap();
+        self.add_token(TokenType::Number { literal: number })
     }
 
     fn peek_next(&self) -> u8 {
@@ -189,24 +177,13 @@ impl Scanner {
         }
     }
 
-    fn is_alphabetic(c: u8) -> bool {
-        (b'a' <= c && c <= b'z') || (b'A' <= c && c <= b'Z') || c == b'_'
-    }
-
-    fn is_alphanumeric(c: u8) -> bool {
-        Self::is_digit(c) || Self::is_alphabetic(c)
-    }
-
     fn identifier(&mut self) {
-        while Self::is_alphanumeric(self.peek()) {
+        while self.peek().is_alphanumeric() {
             self.advance();
         }
 
-        let text = String::from_utf8(
-            self.source.as_bytes()[self.start..self.current].to_vec(),
-        )
-        .unwrap();
-        let type_ = match text.as_str() {
+        let text = &self.source[self.start..self.current];
+        let type_ = match text {
             "and" => TokenType::And,
             "class" => TokenType::Class,
             "else" => TokenType::Else,
@@ -227,5 +204,25 @@ impl Scanner {
         };
 
         self.add_token(type_);
+    }
+}
+
+trait AsciiExt_ {
+    fn is_digit(&self) -> bool;
+    fn is_alphabetic(&self) -> bool;
+    fn is_alphanumeric(&self) -> bool;
+}
+
+impl AsciiExt_ for u8 {
+    fn is_digit(&self) -> bool {
+        (*self as char).is_digit(10)
+    }
+
+    fn is_alphabetic(&self) -> bool {
+        (*self as char).is_alphabetic() || *self == b'_'
+    }
+
+    fn is_alphanumeric(&self) -> bool {
+        (*self as char).is_alphanumeric() || *self == b'_'
     }
 }
