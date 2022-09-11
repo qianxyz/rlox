@@ -111,20 +111,20 @@ impl Scanner {
     }
 
     fn match_(&mut self, expected: u8) -> bool {
-        if self.is_at_end() || self.source.as_bytes()[self.current] != expected
-        {
-            false
-        } else {
-            self.current += 1;
-            true
+        match self.source.as_bytes().get(self.current) {
+            None => false,
+            Some(&c) if c != expected => false,
+            _ => {
+                self.current += 1;
+                true
+            }
         }
     }
 
     fn peek(&self) -> u8 {
-        if self.is_at_end() {
-            b'\0'
-        } else {
-            self.source.as_bytes()[self.current]
+        match self.source.as_bytes().get(self.current) {
+            None => b'\0',
+            Some(&c) => c,
         }
     }
 
@@ -169,10 +169,9 @@ impl Scanner {
     }
 
     fn peek_next(&self) -> u8 {
-        if self.current + 1 >= self.source.len() {
-            b'\0'
-        } else {
-            self.source.as_bytes()[self.current + 1]
+        match self.source.as_bytes().get(self.current + 1) {
+            None => b'\0',
+            Some(&c) => c,
         }
     }
 
