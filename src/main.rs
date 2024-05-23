@@ -1,53 +1,62 @@
-mod expr;
-mod parser;
-mod scanner;
-mod token;
-
 use std::io::{self, Write};
-use std::{env, error, fs, result};
+use std::{env, fs};
 
-use crate::scanner::Scanner;
+use anyhow::{bail, Result};
 
-pub type Error = Box<dyn error::Error>;
-pub type Result<T> = result::Result<T, Error>;
+use rlox::scanner::Scanner;
 
-fn main() {
+fn main() -> Result<()> {
+    // usage: ./rlox [file.lox]
+    // run script if provided, otherwise run REPL
+
     let mut args = env::args();
 
     // skip the first arg (binary name)
     args.next();
 
     match args.next() {
-        Some(path) => run_file(&path),
-        None => run_prompt(),
+        Some(path) => run_file(path),
+        None => run_repl(),
     }
 }
 
-fn run_file(path: &str) {
-    let source = fs::read_to_string(path).unwrap();
-    run(source);
+fn run_file(path: String) -> Result<()> {
+    let source = fs::read_to_string(path)?;
+    run(source)
 }
 
-fn run_prompt() {
+fn run_repl() -> Result<()> {
     loop {
         // print prompt
         print!("> ");
-        io::stdout().flush().unwrap();
+        io::stdout().flush()?;
 
         let mut buffer = String::new();
-        match io::stdin().read_line(&mut buffer) {
-            Ok(0) => break,
-            Ok(_) => run(buffer),
-            Err(_) => todo!(),
+        // if read 0 bytes, exit
+        if io::stdin().read_line(&mut buffer)? == 0 {
+            return Ok(());
         }
+
+        // ignore error
+        let _ = run(buffer);
     }
 }
 
-fn run(source: String) {
-    let mut scanner = Scanner::new(source);
-    let tokens = scanner.scan_tokens();
+fn run(source: String) -> Result<()> {
+    let scanner = Scanner::new(source);
+    let tokens = match scanner.scan_tokens() {
+        Ok(tokens) => tokens,
+        Err(errors) => {
+            for error in errors {
+                eprintln!("{}", error);
+            }
+            bail!("scanner error")
+        }
+    };
 
     for token in tokens {
         println!("{:?}", token);
     }
+
+    Ok(())
 }

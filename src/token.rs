@@ -1,4 +1,4 @@
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[rustfmt::skip]
 pub enum TokenType {
     // single-character tokens
@@ -12,9 +12,9 @@ pub enum TokenType {
     Less, LessEqual,
 
     // literals
-    Identifier,
-    String { literal: String },
-    Number { literal: f32 },
+    Identifier(String),
+    String(String),
+    Number(f32),
 
     // keywords
     And, Class, Else, False, Fun, For, If, Nil, Or,
@@ -23,7 +23,7 @@ pub enum TokenType {
     Eof,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Token {
     type_: TokenType,
     lexeme: String,

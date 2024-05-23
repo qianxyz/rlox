@@ -1,10 +1,36 @@
+use thiserror::Error;
+
 use crate::token::{Token, TokenType};
 
+/// A scanner that reads source code and produces a list of tokens or errors.
+/// NOTE: Only ASCII characters are supported.
 pub struct Scanner {
+    /// The source code to scan.
     source: String,
+    /// The output list of tokens.
     tokens: Vec<Token>,
+    /// The list of scanner errors.
+    errors: Vec<ScannerError>,
+    /// The start of the current lexeme being scanned.
     start: usize,
+    /// The current character being scanned.
     current: usize,
+    /// The current line number.
+    line: usize,
+}
+
+#[derive(Error, Debug)]
+pub enum ScannerErrorType {
+    #[error("unexpected character '{}'", *.0 as char)]
+    UnexpectedCharacter(u8),
+    #[error("unterminated string")]
+    UnterminatedString,
+}
+
+#[derive(Error, Debug)]
+#[error("[line {line}] Error: {error}")]
+pub struct ScannerError {
+    error: ScannerErrorType,
     line: usize,
 }
 
@@ -13,21 +39,29 @@ impl Scanner {
         Self {
             source,
             tokens: Vec::new(),
+            errors: Vec::new(),
             start: 0,
             current: 0,
             line: 1,
         }
     }
 
-    pub fn scan_tokens(&mut self) -> &[Token] {
+    /// Entry point for scanning.
+    pub fn scan_tokens(mut self) -> Result<Vec<Token>, Vec<ScannerError>> {
         while !self.is_at_end() {
+            // current parse point is the start of the next lexeme
             self.start = self.current;
             self.scan_token();
         }
 
-        self.tokens
-            .push(Token::new(TokenType::Eof, String::new(), self.line));
-        &self.tokens
+        if self.errors.is_empty() {
+            // add EOF token
+            self.tokens
+                .push(Token::new(TokenType::Eof, String::new(), self.line));
+            Ok(self.tokens)
+        } else {
+            Err(self.errors)
+        }
     }
 
     fn is_at_end(&self) -> bool {
@@ -92,13 +126,14 @@ impl Scanner {
             b'\n' => self.line += 1,
 
             b'"' => self.string(),
-            c if c.is_digit() => self.number(),
-            c if c.is_alphabetic() => self.identifier(),
+            c if c.is_ascii_digit() => self.number(),
+            c if c.is_ascii_alphabetic() || c == b'_' => self.identifier(),
 
-            _ => todo!("unexpected character"),
+            _ => self.add_error(ScannerErrorType::UnexpectedCharacter(c)),
         };
     }
 
+    /// Consumes the current character and returns it.
     fn advance(&mut self) -> u8 {
         self.current += 1;
         self.source.as_bytes()[self.current - 1]
@@ -110,6 +145,14 @@ impl Scanner {
             .push(Token::new(type_, text.to_string(), self.line))
     }
 
+    fn add_error(&mut self, error: ScannerErrorType) {
+        self.errors.push(ScannerError {
+            error,
+            line: self.line,
+        });
+    }
+
+    /// Consumes the current character if it matches the expected character.
     fn match_(&mut self, expected: u8) -> bool {
         match self.source.as_bytes().get(self.current) {
             None => false,
@@ -121,6 +164,7 @@ impl Scanner {
         }
     }
 
+    /// Returns the current character without consuming it.
     fn peek(&self) -> u8 {
         match self.source.as_bytes().get(self.current) {
             None => b'\0',
@@ -137,37 +181,35 @@ impl Scanner {
         }
 
         if self.is_at_end() {
-            todo!("unterminated string")
+            self.add_error(ScannerErrorType::UnterminatedString);
         }
 
         // consume the ending `"`
         self.advance();
 
         let value = &self.source[self.start + 1..self.current - 1];
-        self.add_token(TokenType::String {
-            literal: value.to_string(),
-        })
+        self.add_token(TokenType::String(value.to_string()));
     }
 
     fn number(&mut self) {
-        while self.peek().is_digit() {
+        while self.peek().is_ascii_digit() {
             self.advance();
         }
 
         // fractional part
-        if self.peek() == b'.' && self.peek_next().is_digit() {
+        if self.peek() == b'.' && self.peek_next().is_ascii_digit() {
             // consume the `.`
             self.advance();
-            while self.peek().is_digit() {
+            while self.peek().is_ascii_digit() {
                 self.advance();
             }
         }
 
-        let number: f32 =
-            self.source[self.start..self.current].parse().unwrap();
-        self.add_token(TokenType::Number { literal: number })
+        let number: f32 = self.source[self.start..self.current].parse().unwrap();
+        self.add_token(TokenType::Number(number));
     }
 
+    /// Returns the next character without consuming it.
     fn peek_next(&self) -> u8 {
         match self.source.as_bytes().get(self.current + 1) {
             None => b'\0',
@@ -176,7 +218,7 @@ impl Scanner {
     }
 
     fn identifier(&mut self) {
-        while self.peek().is_alphanumeric() {
+        while self.peek().is_ascii_alphanumeric() || self.peek() == b'_' {
             self.advance();
         }
 
@@ -198,29 +240,9 @@ impl Scanner {
             "true" => TokenType::True,
             "var" => TokenType::Var,
             "while" => TokenType::While,
-            _ => TokenType::Identifier,
+            _ => TokenType::Identifier(text.to_string()),
         };
 
         self.add_token(type_);
-    }
-}
-
-trait AsciiExt_ {
-    fn is_digit(&self) -> bool;
-    fn is_alphabetic(&self) -> bool;
-    fn is_alphanumeric(&self) -> bool;
-}
-
-impl AsciiExt_ for u8 {
-    fn is_digit(&self) -> bool {
-        (*self as char).is_ascii_digit()
-    }
-
-    fn is_alphabetic(&self) -> bool {
-        (*self as char).is_alphabetic() || *self == b'_'
-    }
-
-    fn is_alphanumeric(&self) -> bool {
-        (*self as char).is_alphanumeric() || *self == b'_'
     }
 }
